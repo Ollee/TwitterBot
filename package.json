@@ -1,0 +1,14 @@
+{
+  "name": "tweetbot",
+  "version": "1.0.0",
+  "description": "Twitterbot codealong",
+  "main": "bot.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Andrea Cozart-Lundin",
+  "license": "ISC",
+  "dependencies": {
+    "twit": "^2.2.5"
+  }
+}
