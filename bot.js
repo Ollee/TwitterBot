@@ -1,109 +1,89 @@
 console.log('Bot has started!');
 var Twit = require('twit');  
-var config = require('./config.js');
+const config = require('./config.js');
 
-var Twitter = new Twit(config);
-var stream = Twitter.stream('user');
+var Twitter = new Twit(config.c);
 
-stream.on('follow', followed);
-
-function followed(event) {
-	console.log("followed events!");
-	var name = event.source.name;
-	var screenName = event.source.screen_name;
-	tweetIt('@' + screenName + ' Thanks for the follow!');
-}
-
-function tweetIt(txt) {
-	var tweet ={
-		status: txt
-	};
-	Twitter.post('statuses/update', tweet, tweeted);
-}
-
-function tweeted(err, data, response) {
-	if (err) {
-		console.log("Something went wrong!");
-	} else {
-		console.log("It worked!");
-	}
-}
 // find latest tweet according the query 'q' in params
-var retweet = function() {  
+var retweet = function(retweetRemaining) {  
     var params = {
-        q: '#webdev, #IoT',  // REQUIRED
+        q: config.hashtag,  // REQUIRED
         result_type: 'recent', 
         lang: 'en'
-    }
+    };
+	
     Twitter.get('search/tweets', params, function(err, data) {
-      // if there no errors
-        if (!err) {
-          // grab ID of tweet to retweet
-            var retweetId = data.statuses[0].id_str;
-            // Tell TWITTER to retweet
-            Twitter.post('statuses/retweet/:id', {
-                id: retweetId
-            }, function(err, response) {
-                if (response) {
-                    console.log('Retweeted!!!');
-                }
-                // if there was an error while tweeting
-                if (err) {
-                    console.log('Something went wrong while RETWEETING... Duplication maybe...');
-                }
-            });
-        }
-        // if unable to Search a tweet
-        else {
-          console.log('Something went wrong while SEARCHING...');
-        }
+		//console.log(data.statuses[0].user);
+		var tweetSentCount = 0;
+		// if there no errors
+		if(!err){
+			var sizeOfResponses = data.statuses.length;
+			console.log(Date() + ' Received ' + sizeOfResponses + ' tweets');
+			if(sizeOfResponses > 0){
+				for (count = 0; count < sizeOfResponses; count++) {
+					//console.log('processing tweets: ' + sizeOfResponses + ' on run: ' + count);
+					if(count < retweetRemaining && data.statuses[count].user.screen_name != 'lasshold'){
+					
+						var p = {
+							id:	data.statuses[count].id_str
+						};
+						
+						
+						(function(c,d){
+							Twitter.get('statuses/retweeters/ids', p, function(err, ids ){
+								if(ids.ids.includes(d.statuses[c].user.id)){
+									console.log(Date() + ' something contained');
+									// grab ID of tweet to retweet
+									var retweetId = d.statuses[c].id_str;
+									// Tell TWITTER to retweet
+									Twitter.post('statuses/retweet/:id', {
+										id: retweetId
+									}, function(err, response) {
+										if (response) {
+											console.log(Date() + ' Retweeted!!!');
+											tweetSentCount++;
+										}
+										// if there was an error while tweeting
+										if (err) {
+											console.log(Date() + ' Something went wrong while RETWEETING... Duplication maybe...');
+											console.log(err);
+										}
+									});
+								}
+								else{
+									//console.log('tweet already retweeted');
+								}
+							});
+						})(count, data);
+					}
+				}
+			} 
+			else { 
+			console.log(Date() + ' Nothing to Retweet');
+			}
+		}
+		else{
+			console.log(Date() + ' Something went Wrong while searching');
+		}
+		console.log(Date() + ' Sent     ' + tweetSentCount + ' tweets');
     });
 }
 
-// grab & retweet as soon as program is running...
-retweet();  
-// retweet in every 50 minutes
-setInterval(retweet, 1800000);
-
-// FAVORITE BOT====================
-
-// find a random tweet and 'favorite' it
-var favoriteTweet = function(){  
-  var params = {
-      q: '#webdev, #IoT',  // REQUIRED
-      result_type: 'recent',
-      lang: 'en'
-  }
-  // find the tweet
-  Twitter.get('search/tweets', params, function(err,data){
-
-    // find tweets
-    var tweet = data.statuses;
-    var randomTweet = ranDom(tweet);   // pick a random tweet
-
-    // if random tweet exists
-    if(typeof randomTweet != 'undefined'){
-      // Tell TWITTER to 'favorite'
-      Twitter.post('favorites/create', {id: randomTweet.id_str}, function(err, response){
-        // if there was an error while 'favorite'
-        if(err){
-          console.log('CANNOT BE FAVORITE... Error');
-        }
-        else{
-          console.log('FAVORITED... Success!!!');
-        }
-      });
-    }
-  });
+var ratelimit = function() {
+	var params = {};
+	Twitter.get('application/rate_limit_status', params, function(err, data){
+		var retweetLimit = data.resources.statuses['/statuses/retweets/:id'].limit;
+		var retweetRemaining = data.resources.statuses['/statuses/retweets/:id'].remaining;
+		var remainingSearch = data.resources.users['/users/search'].remaining;
+		console.log(Date() + ' retweetLimit: ' + retweetLimit + '   retweetRemaining: ' + retweetRemaining + '   search remaining: ' + remainingSearch);
+		
+		if(retweetRemaining > 0 && remainingSearch > 0){
+			retweet(retweetRemaining);  
+		}
+	});
+	
 }
-// grab & 'favorite' as soon as program is running...
-favoriteTweet();  
-// 'favorite' a tweet in every 60 minutes
-setInterval(favoriteTweet, 1800000);
 
-// function to generate a random tweet tweet
-function ranDom (arr) {  
-  var index = Math.floor(Math.random()*arr.length);
- return arr[index];
-}  
+ratelimit();
 
+setInterval(ratelimit, 60000);
